@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<input type="date" id="lastService" />
+<input type="file" id="checklist" />
+
+<style>
+  /* Management panel */
+  .manage-card {
+    margin-top: 16px;
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  }
+  .manage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .field { position: relative; }
+  .field label {
+    font-size: 12px; font-weight: 700; margin-bottom: 6px; display: block; color: #334155;
+  }
+  .field input[type="text"], .field select, .field input[type="date"] {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; font-size: 14px;
+  }
+  .btn {
+    border: 1px solid #cbd5e1; background: #f8fafc; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; color: #0f172a;
+  }
+  .btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+  .btn:hover { background: #eef2f7; }
+  .btn.primary:hover { background: #1e4fd7; }
+
+  .inline-actions { display: flex; gap: 8px; }
+  .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+
+  /* Suggestions (typeahead) */
+  .suggestions {
+    position: absolute; top: 62px; left: 0; right: 0; z-index: 10;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 8px;
+    max-height: 220px; overflow: auto; margin: 4px 0 0; padding: 4px 0;
+    list-style: none; display: none;
+  }
+  .suggestions.show { display: block; }
+  .suggestions li { padding: 8px 10px; cursor: pointer; font-size: 14px; }
+  .suggestions li:hover { background: #f1f5f9; }
+
+  /* Month cells (if you already added Jan–Dec 2026 columns) */
+  td.month-cell {
+    text-align: center; vertical-align: middle; padding: 6px;
+    transition: background-color 140ms ease, border-color 140ms ease;
+  }
+  td.month-cell.is-selected { background: #f0fff4; border-left: 3px solid #16a34a; }
+  td.month-cell input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+
+
+
+  /* Compact row tools */
+  .row-tools { display: inline-flex; gap: 6px; margin-left: 8px; }
+  .btn-link { background: transparent; border: 0; color: #2563eb; cursor: pointer; font-size: 12px; padding: 0; }
+  .btn-link:hover { text-decoration: underline; }
+</style>
+
+
+<style>
+  /* Toolbar styles */
+  #ppm-filters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+    margin: 12px 0 8px;
+    align-items: start;
+  }
+  #ppm-filters .field {
+    position: relative;
+  }
+  #ppm-filters label {
+    font-size: 12px;
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: block;
+    color: #334155;
+  }
+  #ppm-filters input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+  }
+  #ppm-filters .actions {
+    display: flex;
+    gap: 8px;
+    align-items: end;
+  }
+  #ppm-filters .btn {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  #ppm-filters .btn:hover {
+    background: #eef2f7;
+  }
+
+  /* Typeahead dropdown */
+  .suggestions {
+    position: absolute;
+    top: 62px; /* height of label+input */
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    max-height: 220px;
+    overflow: auto;
+    margin: 4px 0 0;
+    padding: 4px 0;
+    list-style: none;
+    display: none; /* hidden by default */
+  }
+  .suggestions.show { display: block; }
+  .suggestions li {
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .suggestions li:hover {
+    background: #f1f5f9;
+  }
+
+  /* Optional: a subtle "no results" message */
+  .no-results {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 8px;
+    display: none;
+  }
+  .no-results.show { display: block; }
+</style>
+
+<style>
+    .status {
+      padding: 4px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .status.completed {
+      background: #e6f7e6;
+      color: #0f8a0f;
+      border: 1px solid #0f8a0f;
+    }
+    .status.overdue {
+      background: #ffecec;
+      color: #b00020;
+      border: 1px solid #b00020;
+    }
+    td input[type="date"] {
+      width: 140px;
+      padding: 4px 6px;
+      font-size: 13px;
+    }
+    .row-tools {
+      display: inline-flex;
+      gap: 6px;
+      margin-left: 8px;
+    }
+    .btn-link {
+      background: transparent;
+      border: 0;
+      color: #2563eb;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0;
+    }
+    .btn-link:hover { text-decoration: underline; }
+  </style>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title></title>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+    body { margin: 0; background: #f4f6f8; color: #333; }
+
+    header { background: #0f172a; color: #fff; padding: 16px 24px; }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 4px 0 0; font-size: 14px; opacity: 0.8; }
+
+    .container { padding: 24px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+
+    label { font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block; }
+    input, select { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    button { padding: 10px 14px; border-radius: 8px; border: none; background: #2563eb; color: #fff; font-weight: bold; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { padding: 12px; border-bottom: 1px solid #e5e7eb; font-size: 14px; }
+    th { background: #f1f5f9; }
+    .status { padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; }
+    .pending { background: #fef3c7; color: #92400e; }
+    .completed { background: #dcfce7; color: #166534; }
+    .overdue { background: #fee2e2; color: #991b1b; }
+    footer { text-align: center; padding: 16px; font-size: 12px; color: #6b7280; }
+    @media print { button, input, select { display: none; } }
+  </style>
+
+
+  
+</head>
+<body>
+
+<header>
+  <h1>AGMC PPM PLANNER</h1>
+</header>
+
+<div class="container">
+
+  <!-- OVERALL PPM SCHEDULE VIEW -->
+  <div class="card">
+    <h2>Overall PPM Schedule</h2>
+
+
+<!-- Manage: Add Showroom / Service / Company + Compose Row -->
+<div class="manage-card" id="ppm-manage">
+  <h3 style="margin:0 0 8px;">Manage Master Data & Add Rows</h3>
+
+  <!-- Three independent adders -->
+  <div class="manage-grid">
+    <!-- Showroom -->
+    <div class="field">
+      <label for="mgrShowroom">Add Showroom</label>
+      <div class="inline-actions">
+        <input id="mgrShowroom" type="text" placeholder="Type showroom name..." autocomplete="off" />
+        <button id="btnAddShowroom" class="btn" type="button">Add Showroom</button>
+      </div>
+      <ul id="mgrShowroomUL" class="suggestions"></ul>
+      <p class="hint">Type to see existing showrooms. Click “Add Showroom” to create a new one.</p>
+    </div>
+
+    <!-- Service -->
+    <div class="field">
+      <label for="mgrService">Add Service</label>
+      <div class="inline-actions">
+        <input id="mgrService" type="text" placeholder="Type service name..." autocomplete="off" />
+        <button id="btnAddService" class="btn" type="button">Add Service</button>
+      </div>
+      <ul id="mgrServiceUL" class="suggestions"></ul>
+      <p class="hint">Examples: HVAC, Electrical, Plumbing, CCTV…</p>
+    </div>
+
+    <!-- Company Assigned -->
+    <div class="field">
+      <label for="mgrCompany">Add Company Assigned</label>
+      <div class="inline-actions">
+        <input id="mgrCompany" type="text" placeholder="Type company name..." autocomplete="off" />
+        <button id="btnAddCompany" class="btn" type="button">Add Company</button>
+      </div>
+      <ul id="mgrCompanyUL" class="suggestions"></ul>
+      <p class="hint">Examples: GECO, Pest Man, Bixko…</p>
+    </div>
+  </div>
+
+  <!-- Compose and add a table row -->
+  <h4 style="margin:10px 0 6px;">Compose a new table row</h4>
+  <div class="manage-grid">
+    <div class="field">
+      <label for="compShowroom">Showroom</label>
+      <select id="compShowroom"></select>
+    </div>
+    <div class="field">
+      <label for="compService">Service</label>
+      <select id="compService"></select>
+    </div>
+    <div class="field">
+      <label for="compFrequency">Frequency</label>
+      <select id="compFrequency">
+        <option>Monthly</option>
+        <option>Bi-Monthly</option>
+        <option selected>Quarterly</option>
+        <option>Half Yearly</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="compCompany">Company Assigned</label>
+      <select id="compCompany"></select>
+    </div>
+    <div class="field">
+      <label for="compLast">Last Service</label>
+      <input id="compLast" type="date" />
+    </div>
+    <div class="field">
+      <label for="compNext">Next Due Date</label>
+      <input id="compNext" type="date" />
+    </div>
+  </div>
+
+  <div class="inline-actions" style="margin-top:6px;">
+    <button id="btnAddRow" class="btn primary" type="button">Add Row to Table</button>
+    <button id="btnClearComposer" class="btn" type="button">Clear</button>
+   </div>
+
+<!-- 🔎 Filters toolbar -->
+<div id="ppm-filters">
+  <div class="field">
+    <label for="filterShowroom">Search by Showroom</label>
+    <input id="filterShowroom" type="text" placeholder="Type the first letter..." autocomplete="off" />
+    <ul id="showroomSuggestions" class="suggestions"></ul>
+  </div>
+
+  <div class="field">
+    <label for="filterCompany">Search by Company Assigned</label>
+    <input id="filterCompany" type="text" placeholder="Start typing company..." autocomplete="off" />
+    <ul id="companySuggestions" class="suggestions"></ul>
+  </div>
+
+  <div class="actions">
+    <button id="clearFilters" class="btn" type="button">Clear filters</button>
+  </div>
+</div>
+
+<!-- Optional: no-results message -->
+<div id="ppm-no-results" class="no-results">
+  No matching records found.
+</div>
+
+    <p style="font-size:13px;color:#64748b">Master view of all preventive maintenance services</p>
+
+   
+
+    <table id="overallPPM">
+      <thead>
+        <tr>
+	<th>Showroom</th>
+          <th>Service</th>
+          <th>Frequency</th>
+          <th>Company Assigned</th>
+          <th>Last Service</th>
+          <th>Next Due Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>HVAC</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Electrical</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Plumbing</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>CCTV</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Fire fighting and Fire Alarm</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Gate Barrier</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Automatic Shutter Doors</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Elevator</td>
+          <td>Monthly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Part Lift</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Generator</td>
+          <td>Bi-Monthly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Water Tank Cleaning</td>
+          <td>Half Yearly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>BMS and Lighting System</td>
+          <td>Quarterly</td>
+          <td>GECO</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Pest Control</td>
+          <td>Monthly</td>
+          <td>Pest Man</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+
+    
+	<tr>
+          <td>Geely Dubai</td>
+          <td>Facade Cleaning</td>
+          <td>Quarterly</td>
+          <td>Bixko</td>
+          <td><input type="date"></td>
+          <td><input type="date"></td>
+          <td><span class="status overdue">Overdue</span></td>
+        </tr>
+          </tbody>
+    </table>
+
+
+<script>
+    (function enableEditableDatesPerService() {
+      const table = document.getElementById('overallPPM');
+      if (!table) return;
+
+      // Helpers
+      function parseDMY(dmy) {
+        const [dd, mm, yyyy] = (dmy || '').split('-').map(s => parseInt(s, 10));
+        if (!yyyy || !mm || !dd) return null;
+        return new Date(yyyy, mm - 1, dd);
+      }
+      function toISODateString(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+      function todayLocalMidnight() {
+        const t = new Date();
+        return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      }
+      function slug(s) {
+        return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      }
+      function ensureStatusSpan(cell) {
+        let statusSpan = cell.querySelector('.status');
+        if (!statusSpan) {
+          statusSpan = document.createElement('span');
+          statusSpan.className = 'status';
+          cell.innerHTML = '';
+          cell.appendChild(statusSpan);
+        }
+        return statusSpan;
+      }
+      function setStatus(statusCell, nextDueISO, lastISO) {
+        const statusSpan = ensureStatusSpan(statusCell);
+        const today = todayLocalMidnight();
+
+        const nextDueDate = nextDueISO ? new Date(nextDueISO) : null;
+        const lastServiceDate = lastISO ? new Date(lastISO) : null;
+
+        if (!nextDueDate || isNaN(nextDueDate)) {
+          statusSpan.textContent = '—';
+          statusSpan.className = 'status';
+          return;
+        }
+        // Overdue if next due is today or earlier (change to < today for strict past-only)
+        const nextDueMidnight = new Date(nextDueDate.getFullYear(), nextDueDate.getMonth(), nextDueDate.getDate());
+        if (nextDueMidnight <= today) {
+          statusSpan.textContent = 'Overdue';
+          statusSpan.className = 'status overdue';
+          return;
+        }
+        statusSpan.textContent = 'Completed';
+        statusSpan.className = 'status completed';
+      }
+
+      const rows = table.querySelectorAll('tbody tr');
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 7) return;
+
+        const showroom = cells[0].textContent.trim();
+        const service  = cells[1].textContent.trim();
+        const lastCell = cells[4];
+        const nextCell = cells[5];
+        const statusCell = cells[6];
+
+        const rowKey = `ppm-row-${slug(showroom)}__${slug(service)}`;
+        const lastKey = `${rowKey}-last`;
+        const nextKey = `${rowKey}-next`;
+
+        // Build/Reuse inputs
+        let lastInput = lastCell.querySelector('input[type="date"]');
+        let nextInput = nextCell.querySelector('input[type="date"]');
+
+        if (!lastInput) {
+          const initialLast = parseDMY(lastCell.textContent.trim());
+          lastCell.innerHTML = '';
+          lastInput = document.createElement('input');
+          lastInput.type = 'date';
+          const savedLastISO = localStorage.getItem(lastKey);
+          if (savedLastISO) lastInput.value = savedLastISO;
+          else if (initialLast) lastInput.value = toISODateString(initialLast);
+          lastCell.appendChild(lastInput);
+        }
+        if (!nextInput) {
+          const initialNext = parseDMY(nextCell.textContent.trim());
+          nextCell.innerHTML = '';
+          nextInput = document.createElement('input');
+          nextInput.type = 'date';
+          const savedNextISO = localStorage.getItem(nextKey);
+          if (savedNextISO) nextInput.value = savedNextISO;
+          else if (initialNext) nextInput.value = toISODateString(initialNext);
+          nextCell.appendChild(nextInput);
+        }
+
+        // Optional: enforce Next Due >= Last Service
+        function enforceMinNextDue() {
+          if (lastInput.value) nextInput.min = lastInput.value;
+          else nextInput.removeAttribute('min');
+        }
+        enforceMinNextDue();
+
+        // Row tools: Reset link
+        const tools = document.createElement('span');
+        tools.className = 'row-tools';
+        const resetBtn = document.createElement('button');
+        resetBtn.type = 'button';
+        resetBtn.className = 'btn-link';
+        resetBtn.textContent = 'Reset';
+        tools.appendChild(resetBtn);
+        statusCell.appendChild(tools);
+
+        // Initial status
+        setStatus(statusCell, nextInput.value, lastInput.value);
+
+        // Save + update on input/change
+        const handler = () => {
+          enforceMinNextDue();
+          if (lastInput.value) localStorage.setItem(lastKey, lastInput.value);
+          else localStorage.removeItem(lastKey);
+          if (nextInput.value) localStorage.setItem(nextKey, nextInput.value);
+          else localStorage.removeItem(nextKey);
+          setStatus(statusCell, nextInput.value, lastInput.value);
+        };
+        lastInput.addEventListener('input', handler);
+        lastInput.addEventListener('change', handler);
+        nextInput.addEventListener('input', handler);
+        nextInput.addEventListener('change', handler);
+
+        // Reset behavior
+        resetBtn.addEventListener('click', () => {
+          localStorage.removeItem(lastKey);
+          localStorage.removeItem(nextKey);
+          lastInput.value = '';
+          nextInput.value = '';
+          enforceMinNextDue();
+          setStatus(statusCell, null, null);
+        });
+      });
+    })();
+  </script>
+
+
+<style>
+  /* Base month cell style */
+  td.month-cell {
+    text-align: center;
+    vertical-align: middle;
+    padding: 6px;
+    transition: background-color 140ms ease, border-color 140ms ease;
+  }
+
+  /* Remove all pre-existing green highlights */
+  td.month-cell.due {
+    background: transparent !important;
+    border-left: none !important;
+  }
+
+  /* Checkbox only (neutral) */
+  td.month-cell input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: auto; /* use browser default, no forced color */
+  }
+
+  /* NEW: turn the cell green when selected */
+  td.month-cell.is-selected {
+    background: #f0fff4;           /* light green background */
+    border-left: 3px solid #16a34a;
+  }
+</style>
+
+
+<script>
+  (function addMonthlyColumnsFor2026_CheckboxOnly_ToggleGreenOnSelect() {
+    const table = document.getElementById('overallPPM');
+    if (!table) return;
+
+    const months = [
+      'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
+    ];
+    const year = 2026;
+
+    const theadRow = table.querySelector('thead tr');
+    const tbodyRows = table.querySelectorAll('tbody tr');
+
+    // 1) Extend header (only if not already extended)
+    const existingMonthHeaders = Array.from(theadRow.querySelectorAll('th')).map(th => th.textContent);
+    const needsHeaders = !existingMonthHeaders.includes(`Jan ${year}`) || !existingMonthHeaders.includes(`Dec ${year}`);
+    if (needsHeaders) {
+      months.forEach(m => {
+        const th = document.createElement('th');
+        th.textContent = `${m} ${year}`;
+        theadRow.appendChild(th);
+      });
+    }
+
+    // Frequency → due month indexes (kept for potential future use; not styling now)
+    function dueMonthIndexes(freq) {
+      const f = (freq || '').trim().toLowerCase();
+      if (f === 'monthly') return Array.from({length:12}, (_,i) => i);
+      if (f === 'bi-monthly' || f === 'bimonthly') return [0,2,4,6,8,10];
+      if (f === 'quarterly') return [2,5,8,11];
+      if (f === 'half yearly' || f === 'semi-annual' || f === 'semi-annually') return [5,11];
+      return [];
+    }
+
+    function slug(s) {
+      return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    // 2) Add checkbox-only month cells per row, with green toggle
+    tbodyRows.forEach(row => {
+      const cells = row.querySelectorAll('td');
+      if (cells.length < 2) return;
+
+      const showroom = cells[0].textContent.trim();
+      const service  = cells[1].textContent.trim();
+      const freq     = cells[2]?.textContent.trim() || '';
+      const serviceKey = `${slug(showroom)}__${slug(service)}`;
+
+      // If you still want due-month info logically (no styling), keep it:
+      const dueIdx = dueMonthIndexes(freq);
+
+      // Prevent duplicate month cells if script runs twice
+      const existingMonthCellCount = row.querySelectorAll('td.month-cell').length;
+      if (existingMonthCellCount >= 12) return;
+
+      months.forEach((m, idx) => {
+        const mm = String(idx + 1).padStart(2, '0');
+        const storageKey = `ppm-${serviceKey}-${year}-${mm}`;
+
+        const td = document.createElement('td');
+        td.className = 'month-cell';
+        // Remove due highlight entirely (we're not adding any)
+        td.classList.remove('due');
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `chk-${serviceKey}-${year}-${mm}`;
+
+        // Initialize from localStorage
+        const checked = localStorage.getItem(storageKey) === '1';
+        checkbox.checked = checked;
+        if (checked) td.classList.add('is-selected'); // turn cell green when checked
+
+        // Toggle green and persist on change
+        checkbox.addEventListener('change', () => {
+          const isChecked = checkbox.checked;
+          localStorage.setItem(storageKey, isChecked ? '1' : '0');
+          td.classList.toggle('is-selected', isChecked);
+        });
+
+        td.appendChild(checkbox);
+        row.appendChild(td);
+      });
+    });
+  })();
+</script>
+
+
+  </div>
+
+
+  <!-- Add PPM -->
+  <div class="card">
+    <h3>Service-Based PPM Planner</h3>
+    <div class="grid">
+      <input id="service" placeholder="Service Name (e.g. Fire Fighting)" />
+      <select id="location"><option value="">Select Location</option></select>
+      <select id="vendor"><option value="">Select Vendor</option></select>
+      <select id="frequency">
+        <option value="30">Monthly</option>
+        <option value="90">Quarterly</option>
+        <option value="180">Half-Yearly</option>
+        <option value="365">Yearly</option>
+      </select>
+     
+<!-- Contract dates -->
+<div class="field">
+  <label for="contractStart">Contract Start Date</label>
+  <input type="date" id="contractStart" name="contractStart" />
+</div>
+
+<div class="field">
+  <label for="contractEnd">Contract End Date</label>
+  <input type="date" id="contractEnd" name="contractEnd" />
+  <small id="dateError" style="color:#b00020; display:none;">
+    End date must be the same or after the start date.
+  </small>
+</div>
+
+<!-- (Optional) Show contract duration -->
+<div class="field">
+  <label>Contract Duration</label>
+  <output id="durationText">—</output>
+</div>
+
+<style>
+  .field { margin-bottom: 12px; }
+  label { display:block; margin-bottom: 4px; font-weight: 600; }
+  input[type="date"] { padding: 6px; }
+</style>
+
+<script>
+  const startInput = document.getElementById('contractStart');
+  const endInput = document.getElementById('contractEnd');
+  const err = document.getElementById('dateError');
+  const durationText = document.getElementById('durationText');
+
+  function toDate(val) {
+    // Expect YYYY-MM-DD from <input type="date">
+    return val ? new Date(val + 'T00:00:00') : null;
+  }
+
+  function updateConstraintsAndDuration() {
+    const startDate = toDate(startInput.value);
+    const endDate = toDate(endInput.value);
+
+    // Constrain end date's minimum to selected start date
+    if (startDate) {
+      endInput.min = startInput.value;
+    } else {
+      endInput.removeAttribute('min');
+    }
+
+    // Validate ordering
+    const invalid = startDate && endDate && endDate < startDate;
+    err.style.display = invalid ? 'inline' : 'none';
+    endInput.setCustomValidity(invalid ? 'End date must be on/after start date.' : '');
+
+    // Show duration if both are set and valid
+    if (startDate && endDate && !invalid) {
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const days = Math.round((endDate - startDate) / msPerDay) + 1; // inclusive
+      // Approximate months/years for readability
+      const years = Math.floor(days / 365);
+      const months = Math.floor((days % 365) / 30);
+      const remainingDays = days - years * 365 - months * 30;
+
+      let parts = [];
+      if (years) parts.push(`${years} year${years > 1 ? 's' : ''}`);
+      if (months) parts.push(`${months} month${months > 1 ? 's' : ''}`);
+      if (remainingDays || parts.length === 0) parts.push(`${remainingDays} day${remainingDays !== 1 ? 's' : ''}`);
+      durationText.textContent = parts.join(', ');
+    } else {
+      durationText.textContent = '—';
+    }
+  }
+
+  startInput.addEventListener('change', updateConstraintsAndDuration);
+  endInput.addEventListener('change', updateConstraintsAndDuration);
+
+  // Optional: set sensible defaults (e.g., today as min start date)
+  (function init() {
+    const today = new Date();
+    const isoToday = today.toISOString().slice(0, 10);
+    startInput.min = isoToday; // prevent past start dates if desired
+  })();
+</script>
+
+     
+    </div>
+    <br />
+    <button onclick="addPPM()">Save PPM</button>
+  </div>
+
+  <!-- Master Data Management -->
+  <div class="card">
+    <h3>Master Data Management</h3>
+    <div class="grid">
+      <input id="newLocation" placeholder="Add New Location" />
+      <button onclick="addLocation()">Add Location</button>
+      <input id="newVendor" placeholder="Add New Vendor" />
+      <button onclick="addVendor()">Add Vendor</button>
+    </div>
+  </div>
+
+  <!-- Detailed PPM Table -->
+  <div class="card">
+    <h3>Detailed PPM Records</h3>
+    <table id="ppmTable">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Location</th>
+          <th>Vendor</th>
+          <th>Next Due Date</th>
+          <th>Status</th>
+          <th>Checklist</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+
+
+<script>
+  const tableBody = document.querySelector('#ppmTable tbody');
+  const statusFilter = document.getElementById('statusFilter');
+  const searchLocation = document.getElementById('searchLocation');
+  const searchService = document.getElementById('searchService');
+  const searchVendor = document.getElementById('searchVendor');
+  const searchFromDate = document.getElementById('searchFromDate');
+  const searchToDate = document.getElementById('searchToDate');
+
+  let locations = ['Main Building', 'Office Area', 'Warehouse'];
+  let vendors = ['SafeFire LLC', 'CleanPro Services', 'PowerTech ME'];
+
+  function refreshDropdowns() {
+    const locationSelect = document.getElementById('location');
+    const vendorSelect = document.getElementById('vendor');
+    locationSelect.innerHTML = '<option value="">Select Location</option>';
+    locations.forEach(l => locationSelect.innerHTML += `<option>${l}</option>`);
+    vendorSelect.innerHTML = '<option value="">Select Vendor</option>';
+    vendors.forEach(v => vendorSelect.innerHTML += `<option>${v}</option>`);
+  }
+
+  function addLocation() { const val = document.getElementById('newLocation').value; if(val){ locations.push(val); refreshDropdowns(); } }
+  function addVendor() { const val = document.getElementById('newVendor').value; if(val){ vendors.push(val); refreshDropdowns(); } }
+
+  function calculateDueDate(lastDate, days) { const d = new Date(lastDate); d.setDate(d.getDate() + days); return d; }
+  function getStatus(dueDate) { return dueDate < new Date() ? 'Overdue' : 'Pending'; }
+
+  function addPPM() {
+    const service = document.getElementById('service').value;
+    const location = document.getElementById('location').value;
+    const vendor = document.getElementById('vendor').value;
+    const freq = parseInt(document.getElementById('frequency').value);
+    const lastService = document.getElementById('lastService').value;
+    const checklist = document.getElementById('checklist').files[0];
+
+    if(!service || !location || !vendor || !lastService) return alert('Service, Location, Vendor and Date required');
+
+    const due = calculateDueDate(lastService, freq);
+    const status = getStatus(due);
+
+    const row = document.createElement('tr');
+    row.innerHTML = `<td>${service}</td><td>${location}</td><td>${vendor}</td><td>${due.toISOString().split('T')[0]}</td><td><span class="status ${status.toLowerCase()}">${status}</span></td><td>${checklist ? checklist.name : '-'}</td>`;
+    tableBody.appendChild(row);
+    filterTable();
+  }
+
+  function filterTable() {
+    Array.from(tableBody.rows).forEach(row => {
+      const loc = row.cells[1].innerText.toLowerCase();
+      const serv = row.cells[0].innerText.toLowerCase();
+      const vend = row.cells[2].innerText.toLowerCase();
+      const dueDate = new Date(row.cells[3].innerText);
+      const rowStatus = row.cells[4].innerText;
+
+      const matchLocation = !searchLocation.value || loc.includes(searchLocation.value.toLowerCase());
+      const matchService = !searchService.value || serv.includes(searchService.value.toLowerCase());
+      const matchVendor = !searchVendor.value || vend.includes(searchVendor.value.toLowerCase());
+      const fromDate = searchFromDate.value ? new Date(searchFromDate.value) : null;
+      const toDate = searchToDate.value ? new Date(searchToDate.value) : null;
+      const matchDate = (!fromDate || dueDate >= fromDate) && (!toDate || dueDate <= toDate);
+      const matchStatus = statusFilter.value === 'all' || rowStatus === statusFilter.value;
+
+      row.style.display = matchLocation && matchService && matchVendor && matchDate && matchStatus ? '' : 'none';
+    });
+  }
+
+  [searchLocation, searchService, searchVendor, searchFromDate, searchToDate, statusFilter].forEach(el => el.addEventListener('input', filterTable));
+
+  refreshDropdowns();
+</script>
+
+
+
+  <script>
+    (function updatePPMStatuses() {
+      const table = document.getElementById('overallPPM');
+      if (!table) return;
+
+      function parseDMY(dmy) {
+        const [dd, mm, yyyy] = (dmy || '').split('-').map(s => parseInt(s, 10));
+        if (!yyyy || !mm || !dd) return null;
+        return new Date(yyyy, mm - 1, dd);
+      }
+
+      function todayMidnight() {
+        const t = new Date();
+        return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      }
+
+      const today = todayMidnight();
+      const rows = table.querySelectorAll('tbody tr');
+
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 7) return;
+
+        const lastServiceText = cells[4].textContent.trim();
+        const nextDueText = cells[5].textContent.trim();
+        const statusCell = cells[6];
+
+        const lastServiceDate = parseDMY(lastServiceText);
+        const nextDueDate = parseDMY(nextDueText);
+
+        let statusSpan = statusCell.querySelector('.status');
+        if (!statusSpan) {
+          statusSpan = document.createElement('span');
+          statusSpan.className = 'status';
+          statusCell.innerHTML = '';
+          statusCell.appendChild(statusSpan);
+        }
+
+        if (!nextDueDate) {
+          statusSpan.textContent = '—';
+          statusSpan.className = 'status';
+          return;
+        }
+
+        if (nextDueDate < today) {
+          statusSpan.textContent = 'Overdue';
+          statusSpan.className = 'status overdue';
+          return;
+        }
+
+        if (lastServiceDate && lastServiceDate < nextDueDate) {
+          statusSpan.textContent = 'Completed';
+          statusSpan.className = 'status completed';
+        } else {
+          statusSpan.textContent = 'Completed';
+          statusSpan.className = 'status completed';
+        }
+      });
+    })();
+  </script>
+
+
+<script>
+  (function setupPPMFilters() {
+    const table = document.getElementById('overallPPM');
+    if (!table) return;
+
+    const showroomInput = document.getElementById('filterShowroom');
+    const companyInput  = document.getElementById('filterCompany');
+    const showroomUL    = document.getElementById('showroomSuggestions');
+    const companyUL     = document.getElementById('companySuggestions');
+    const clearBtn      = document.getElementById('clearFilters');
+    const noResultsMsg  = document.getElementById('ppm-no-results');
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+    // Build unique lists from table content
+    const showrooms = Array.from(new Set(rows.map(r => r.cells[0]?.textContent.trim()).filter(Boolean))).sort();
+    const companies = Array.from(new Set(rows.map(r => r.cells[3]?.textContent.trim()).filter(Boolean))).sort();
+
+    // OPTIONAL: map showroom to a dedicated page URL (fill these if you have pages)
+    // If a showroom is selected and exists in this map, we navigate instead of filtering.
+    const SHOWROOM_ROUTES = {
+      // 'Geely Dubai': '/pages/geely-dubai.html',
+      // 'Geely Abu Dhabi': '/pages/geely-abu-dhabi.html',
+    };
+
+    // Helpers
+    function normalize(s) { return (s || '').toLowerCase().trim(); }
+    function startsWithFilter(list, query) {
+      const q = normalize(query);
+      if (!q) return [];
+      return list.filter(item => normalize(item).startsWith(q)).slice(0, 10); // max 10
+    }
+    function renderSuggestions(ul, items) {
+      ul.innerHTML = items.map(i => `<li>${i}</li>`).join('');
+      ul.classList.toggle('show', items.length > 0);
+    }
+    function hideSuggestions() {
+      showroomUL.classList.remove('show');
+      companyUL.classList.remove('show');
+    }
+    function applyFilter() {
+      const showroomQ = normalize(showroomInput.value);
+      const companyQ  = normalize(companyInput.value);
+
+      let visibleCount = 0;
+      rows.forEach(row => {
+        const showroom = normalize(row.cells[0]?.textContent);
+        const company  = normalize(row.cells[3]?.textContent);
+
+        const okShowroom = showroomQ ? showroom.includes(showroomQ) : true;
+        const okCompany  = companyQ ? company.includes(companyQ) : true;
+
+        const show = okShowroom && okCompany;
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+      });
+
+      noResultsMsg.classList.toggle('show', visibleCount === 0);
+    }
+    function clearFilters() {
+      showroomInput.value = '';
+      companyInput.value  = '';
+      hideSuggestions();
+      rows.forEach(row => { row.style.display = ''; });
+      noResultsMsg.classList.remove('show');
+    }
+
+    // Showroom input: suggestions + filter / navigate
+    showroomInput.addEventListener('input', () => {
+      const items = startsWithFilter(showrooms, showroomInput.value);
+      renderSuggestions(showroomUL, items);
+      applyFilter(); // live filter while typing
+    });
+    showroomUL.addEventListener('click', (e) => {
+      if (e.target.tagName === 'LI') {
+        const selected = e.target.textContent;
+        showroomInput.value = selected;
+        hideSuggestions();
+
+        // If a route exists for this showroom, navigate; else filter
+        if (SHOWROOM_ROUTES[selected]) {
+          window.location.href = SHOWROOM_ROUTES[selected];
+        } else {
+          applyFilter();
+        }
+      }
+    });
+
+    // Company input: suggestions + filter
+    companyInput.addEventListener('input', () => {
+      const items = startsWithFilter(companies, companyInput.value);
+      renderSuggestions(companyUL, items);
+      applyFilter();
+    });
+    companyUL.addEventListener('click', (e) => {
+      if (e.target.tagName === 'LI') {
+        companyInput.value = e.target.textContent;
+        hideSuggestions();
+        applyFilter();
+      }
+    });
+
+    // Press Enter to apply and hide suggestions
+    [showroomInput, companyInput].forEach(inp => {
+      inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          hideSuggestions();
+          applyFilter();
+        }
+      });
+    });
+
+    // Clear filters
+    clearBtn.addEventListener('click', clearFilters);
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!showroomUL.contains(e.target) && e.target !== showroomInput) showroomUL.classList.remove('show');
+      if (!companyUL.contains(e.target) && e.target !== companyInput) companyUL.classList.remove('show');
+    });
+
+    // Initial state
+    clearFilters();
+  })();
+</script>
+
+
+<script>
+  (function PPMMasterAndRows() {
+    const table = document.getElementById('overallPPM');
+    if (!table) return;
+    const tbody = table.querySelector('tbody');
+
+    // Elements
+    const mgrShowroom = document.getElementById('mgrShowroom');
+    const mgrService  = document.getElementById('mgrService');
+    const mgrCompany  = document.getElementById('mgrCompany');
+    const btnAddShowroom = document.getElementById('btnAddShowroom');
+    const btnAddService  = document.getElementById('btnAddService');
+    const btnAddCompany  = document.getElementById('btnAddCompany');
+
+    const mgrShowroomUL = document.getElementById('mgrShowroomUL');
+    const mgrServiceUL  = document.getElementById('mgrServiceUL');
+    const mgrCompanyUL  = document.getElementById('mgrCompanyUL');
+
+    const compShowroom = document.getElementById('compShowroom');
+    const compService  = document.getElementById('compService');
+    const compFreq     = document.getElementById('compFrequency');
+    const compCompany  = document.getElementById('compCompany');
+    const compLast     = document.getElementById('compLast');
+    const compNext     = document.getElementById('compNext');
+    const btnAddRow    = document.getElementById('btnAddRow');
+    const btnClear     = document.getElementById('btnClearComposer');
+
+    // Storage keys
+    const K_SHOWROOMS = 'ppm-master-showrooms';
+    const K_SERVICES  = 'ppm-master-services';
+    const K_COMPANIES = 'ppm-master-companies';
+    const K_ADDED_ROWS = 'ppm-added-rows';
+
+    // Utils
+    const norm = s => (s || '').trim();
+    const lower = s => (s || '').toLowerCase().trim();
+    const slug = s => lower(s).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const uniqueSorted = arr => Array.from(new Set(arr.filter(Boolean))).sort((a,b) => a.localeCompare(b));
+    const startsWithFilter = (list, q) => {
+      const L = lower(q);
+      if (!L) return [];
+      return list.filter(x => lower(x).startsWith(L)).slice(0, 10);
+    };
+
+    // Build from table + localStorage
+    function loadMasterList(key, fallback) {
+      try {
+        const got = JSON.parse(localStorage.getItem(key) || '[]');
+        if (Array.isArray(got)) return uniqueSorted([...fallback, ...got]);
+      } catch {}
+      return uniqueSorted(fallback);
+    }
+    function saveMasterList(key, list) {
+      localStorage.setItem(key, JSON.stringify(uniqueSorted(list)));
+    }
+
+    function currentTableLists() {
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const showrooms = rows.map(r => norm(r.cells[0]?.textContent));
+      const services  = rows.map(r => norm(r.cells[1]?.textContent));
+      const companies = rows.map(r => norm(r.cells[3]?.textContent));
+      return {
+        showrooms: uniqueSorted(showrooms),
+        services:  uniqueSorted(services),
+        companies: uniqueSorted(companies)
+      };
+    }
+
+    // Initialize master lists
+    let ML = currentTableLists();
+    ML.showrooms = loadMasterList(K_SHOWROOMS, ML.showrooms);
+    ML.services  = loadMasterList(K_SERVICES,  ML.services);
+    ML.companies = loadMasterList(K_COMPANIES, ML.companies);
+
+    // Populate composer selects
+    function renderComposerSelects() {
+      compShowroom.innerHTML = ML.showrooms.map(s => `<option>${s}</option>`).join('') || '<option value="">(none)</option>';
+      compService.innerHTML  = ML.services.map(s => `<option>${s}</option>`).join('') || '<option value="">(none)</option>';
+      compCompany.innerHTML  = ML.companies.map(s => `<option>${s}</option>`).join('') || '<option value="">(none)</option>';
+    }
+    renderComposerSelects();
+
+    // Typeahead (show suggestions below inputs)
+    function wireSuggestions(input, ul, items) {
+      input.addEventListener('input', () => {
+        const list = startsWithFilter(items, input.value);
+        ul.innerHTML = list.map(i => `<li>${i}</li>`).join('');
+        ul.classList.toggle('show', list.length > 0);
+      });
+      ul.addEventListener('click', (e) => {
+        if (e.target.tagName === 'LI') {
+          input.value = e.target.textContent;
+          ul.classList.remove('show');
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (!ul.contains(e.target) && e.target !== input) ul.classList.remove('show');
+      });
+    }
+    wireSuggestions(mgrShowroom, mgrShowroomUL, ML.showrooms);
+    wireSuggestions(mgrService,  mgrServiceUL,  ML.services);
+    wireSuggestions(mgrCompany,  mgrCompanyUL,  ML.companies);
+
+    // Separate Add buttons
+    btnAddShowroom.addEventListener('click', () => {
+      const val = norm(mgrShowroom.value);
+      if (!val) return alert('Enter a showroom name.');
+      if (!ML.showrooms.includes(val)) {
+        ML.showrooms.push(val);
+        saveMasterList(K_SHOWROOMS, ML.showrooms);
+        renderComposerSelects();
+        alert(`Showroom added: ${val}`);
+      } else {
+        alert('Showroom already exists.');
+      }
+    });
+    btnAddService.addEventListener('click', () => {
+      const val = norm(mgrService.value);
+      if (!val) return alert('Enter a service name.');
+      if (!ML.services.includes(val)) {
+        ML.services.push(val);
+        saveMasterList(K_SERVICES, ML.services);
+        renderComposerSelects();
+        alert(`Service added: ${val}`);
+      } else {
+        alert('Service already exists.');
+      }
+    });
+    btnAddCompany.addEventListener('click', () => {
+      const val = norm(mgrCompany.value);
+      if (!val) return alert('Enter a company name.');
+      if (!ML.companies.includes(val)) {
+        ML.companies.push(val);
+        saveMasterList(K_COMPANIES, ML.companies);
+        renderComposerSelects();
+        alert(`Company added: ${val}`);
+      } else {
+        alert('Company already exists.');
+      }
+    });
+
+    // Status helpers
+    function todayMidnight() {
+      const t = new Date();
+      return new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    }
+    function ensureStatusSpan(cell) {
+      let statusSpan = cell.querySelector('.status');
+      if (!statusSpan) {
+        statusSpan = document.createElement('span');
+        statusSpan.className = 'status';
+        cell.innerHTML = '';
+        cell.appendChild(statusSpan);
+      }
+      return statusSpan;
+    }
+    function setStatus(statusCell, nextISO, lastISO) {
+      const s = ensureStatusSpan(statusCell);
+      const today = todayMidnight();
+      const nextD = nextISO ? new Date(nextISO) : null;
+      if (!nextD || isNaN(nextD)) { s.textContent = '—'; s.className = 'status'; return; }
+      const nm = new Date(nextD.getFullYear(), nextD.getMonth(), nextD.getDate());
+      if (nm <= today) { s.textContent = 'Overdue'; s.className = 'status overdue'; return; }
+      s.textContent = 'Completed'; s.className = 'status completed';
+    }
+
+    // Month cells (if header has months Jan–Dec 2026)
+    function headerHasMonths(year = 2026) {
+      const ths = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent);
+      return ths.includes(`Jan ${year}`) && ths.includes(`Dec ${year}`);
+    }
+    function addMonthCellsForRow(row, showroom, service, year = 2026) {
+      if (!headerHasMonths(year)) return;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const serviceKey = `${slug(showroom)}__${slug(service)}`;
+      if (row.querySelectorAll('td.month-cell').length >= 12) return;
+
+      months.forEach((m, idx) => {
+        const mm = String(idx + 1).padStart(2, '0');
+        const key = `ppm-${serviceKey}-${year}-${mm}`;
+        const td = document.createElement('td');
+        td.className = 'month-cell';
+        const chk = document.createElement('input'); chk.type = 'checkbox'; chk.id = `chk-${serviceKey}-${year}-${mm}`;
+        const checked = localStorage.getItem(key) === '1';
+        chk.checked = checked; td.classList.toggle('is-selected', checked);
+        chk.addEventListener('change', () => {
+          localStorage.setItem(key, chk.checked ? '1' : '0');
+          td.classList.toggle('is-selected', chk.checked);
+        });
+        td.appendChild(chk);
+        row.appendChild(td);
+      });
+    }
+
+    // Add row to table + persist row dates + status
+    function addRowToTable({ showroom, service, frequency, company, lastISO, nextISO }) {
+      const tr = document.createElement('tr');
+
+      const tdShowroom = document.createElement('td'); tdShowroom.textContent = showroom;
+      const tdService  = document.createElement('td'); tdService.textContent = service;
+      const tdFreq     = document.createElement('td'); tdFreq.textContent = frequency;
+      const tdCompany  = document.createElement('td'); tdCompany.textContent = company;
+
+      // Date inputs
+      const tdLast = document.createElement('td');
+      const inpLast = document.createElement('input'); inpLast.type = 'date'; if (lastISO) inpLast.value = lastISO;
+      tdLast.appendChild(inpLast);
+
+      const tdNext = document.createElement('td');
+      const inpNext = document.createElement('input'); inpNext.type = 'date'; if (nextISO) inpNext.value = nextISO;
+      tdNext.appendChild(inpNext);
+
+      // Status
+      const tdStatus = document.createElement('td');
+      const statusSpan = document.createElement('span'); statusSpan.className = 'status';
+      tdStatus.appendChild(statusSpan);
+
+      // Append base cells
+      tr.appendChild(tdShowroom);
+      tr.appendChild(tdService);
+      tr.appendChild(tdFreq);
+      tr.appendChild(tdCompany);
+      tr.appendChild(tdLast);
+      tr.appendChild(tdNext);
+      tr.appendChild(tdStatus);
+
+      // Wire status + persist dates
+      const rowKey  = `ppm-row-${slug(showroom)}__${slug(service)}`;
+      const lastKey = `${rowKey}-last`;
+      const nextKey = `${rowKey}-next`;
+
+      const onDatesChange = () => {
+        if (inpLast.value) localStorage.setItem(lastKey, inpLast.value); else localStorage.removeItem(lastKey);
+        if (inpNext.value) localStorage.setItem(nextKey, inpNext.value); else localStorage.removeItem(nextKey);
+        // Min constraint: next >= last
+        if (inpLast.value) inpNext.min = inpLast.value; else inpNext.removeAttribute('min');
+        setStatus(tdStatus, inpNext.value, inpLast.value);
+      };
+      inpLast.addEventListener('input', onDatesChange);
+      inpLast.addEventListener('change', onDatesChange);
+      inpNext.addEventListener('input', onDatesChange);
+      inpNext.addEventListener('change', onDatesChange);
+
+      // Initial status
+      onDatesChange();
+
+      // Add month cells if header has months
+      addMonthCellsForRow(tr, showroom, service, 2026);
+
+      // Add to table
+      tbody.appendChild(tr);
+    }
+
+    // Persist added rows (structure)
+    function getAddedRows() {
+      try { return JSON.parse(localStorage.getItem(K_ADDED_ROWS) || '[]'); } catch { return []; }
+    }
+    function saveAddedRows(rows) {
+      localStorage.setItem(K_ADDED_ROWS, JSON.stringify(rows));
+    }
+    function rehydrateAddedRows() {
+      const rows = getAddedRows();
+      rows.forEach(addRowToTable);
+    }
+
+    // Compose Row — add to table
+    btnAddRow.addEventListener('click', () => {
+      const showroom = norm(compShowroom.value);
+      const service  = norm(compService.value);
+      const company  = norm(compCompany.value);
+      const frequency = norm(compFreq.value);
+      const lastISO = compLast.value || '';
+      const nextISO = compNext.value || '';
+
+      if (!showroom || !service || !company) {
+        alert('Please select Showroom, Service, and Company.');
+        return;
+      }
+
+      // Persist master lists in case user selected newly added items
+      saveMasterList(K_SHOWROOMS, ML.showrooms);
+      saveMasterList(K_SERVICES,  ML.services);
+      saveMasterList(K_COMPANIES, ML.companies);
+
+      // Persist row structure
+      const added = getAddedRows();
+      added.push({ showroom, service, frequency, company, lastISO, nextISO });
+      saveAddedRows(added);
+
+      // Append DOM row
+      addRowToTable({ showroom, service, frequency, company, lastISO, nextISO });
+
+      alert('Row added to table.');
+    });
+
+    // Clear composer
+    btnClear.addEventListener('click', () => {
+      compShowroom.selectedIndex = 0;
+      compService.selectedIndex  = 0;
+      compCompany.selectedIndex  = 0;
+      compFreq.value = 'Quarterly';
+      compLast.value = '';
+      compNext.value = '';
+    });
+
+    // Build previously added rows on load
+    rehydrateAddedRows();
+
+        // Refresh external filters safely
+    function refreshExternalFilters() {
+      const filterShowroomInput = document.getElementById('filterShowroom');
+      const filterCompanyInput  = document.getElementById('filterCompany');
+      const showroomSuggestions = document.getElementById('showroomSuggestions');
+      const companySuggestions  = document.getElementById('companySuggestions');
+
+      if (!filterShowroomInput || !filterCompanyInput) return;
+
+      filterShowroomInput.addEventListener('input', () => {
+        const list = startsWithFilter(ML.showrooms, filterShowroomInput.value);
+        showroomSuggestions.innerHTML = list.map(i => `<li>${i}</li>`).join('');
+        showroomSuggestions.classList.toggle('show', list.length > 0);
+      });
+
+      filterCompanyInput.addEventListener('input', () => {
+        const list = startsWithFilter(ML.companies, filterCompanyInput.value);
+        companySuggestions.innerHTML = list.map(i => `<li>${i}</li>`).join('');
+        companySuggestions.classList.toggle('show', list.length > 0);
+      });
+    }
+
+    refreshExternalFilters();
+  })();
+</script>
+
+
+
+
+</body>
+</html>
