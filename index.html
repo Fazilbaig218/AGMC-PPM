@@ -3,8 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <title>Interactive PPM Dashboard with Drill-Down</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js">
+
+</script>
 <style>
+.group-btn.active {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(37,99,235,0.4);
+}
+
+.group-btn.active {
+  background: #2563eb;
+  color: white;
+}
+
 .scheduled {
   background-color: #d0e7ff; /* light blue */
 }
@@ -30,6 +44,10 @@ canvas{max-height:320px}
 #closeModal{position:absolute;top:10px;right:10px;padding:6px 10px;background:#e74c3c;color:#fff;border:none;border-radius:4px;cursor:pointer}
 
 /* ===== 2x2 Chart Grid Layout ===== */
+/* ===== Group PPM small horizontal charts ===== */
+/* ===== Group PPM Overview ONLY ===== */
+/* ===== Analytics charts (OLD layout restored) ===== */
+
 .chart-grid{
   display:grid;
   grid-template-columns: repeat(2, 1fr);
@@ -41,22 +59,49 @@ canvas{max-height:320px}
   min-height:360px;
 }
 
-/* Mobile responsive */
-@media(max-width:900px){
-  .chart-grid{
-    grid-template-columns: 1fr;
-  }
+#groupDashboard{
+  display:flex;
+  gap:15px;
+  flex-wrap:wrap;
+  margin-bottom:20px;
 }
+
+#groupDashboard .card{
+  width:220px;
+  min-height:260px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+#groupDashboard canvas{
+  max-width:180px !important;
+  max-height:180px !important;
+}
+
+
+/* ===== Full width chart ===== */
+.full-width{
+  width:100%;
+  min-height:420px;
+}
+
+.full-width canvas{
+  width:100% !important;
+  height:340px !important;
+}
+
 
 </style>
 </head>
 <body>
 
-<h2>PPM KPI Dashboard</h2>
+<h2>Overall PPM Overview</h2>
 <div class="dashboard" id="kpiDashboard"></div>
 
-<h2>Group Compliance Overview</h2>
-<div class="dashboard" id="groupDashboard"></div>
+<h2>Group PPM Overview</h2>
+<div class="chart-grid" id="groupDashboard"></div>
+
 
 <h2>Add / Edit PPM Contract</h2>
 <div class="add-form">
@@ -99,8 +144,12 @@ canvas{max-height:320px}
   <button class="group-btn" data-group="BMW">BMW</button>
   <button class="group-btn" data-group="Pitstop">Pitstop</button>
   <button class="group-btn" data-group="Budget">Budget</button>
-  <button id="groupReset">Show All</button>
+  <button id="showAllBtn">Show All</button>
+
+<button id="collapseBtn">Collapse Rows</button>
+
 </div>
+
 
 <table id="ppmTable">
 <thead>
@@ -129,11 +178,49 @@ canvas{max-height:320px}
 ">Full Graph View</button>
 
 <div class="chart-grid">
-  <div class="card"><canvas id="groupStatusChart"></canvas></div>
-  <div class="card"><canvas id="monthlyTrendChart"></canvas></div>
-  <div class="card"><canvas id="vendorChart"></canvas></div>
-  <div class="card"><canvas id="complianceGauge"></canvas></div>
+  <div class="card">
+    <h3 style="text-align:center;margin-bottom:10px;">Facility Wise PPM Overview</h3>
+    <canvas id="groupStatusChart"></canvas>
+  </div>
+  <div class="card">
+    <h3 style="text-align:center;margin-bottom:10px;">Service Wise PPM Overview</h3>
+    <canvas id="monthlyTrendChart"></canvas>
+  </div>
+  <div class="card">
+    <h3 style="text-align:center;margin-bottom:10px;">Vendor Wise PPM Overview</h3>
+    <canvas id="vendorChart"></canvas>
+  </div>
+  <div class="card">
+    <h3 style="text-align:center;margin-bottom:10px;">Completion Wise PPM Overview</h3>
+    <canvas id="complianceGauge"></canvas>
+  </div>
 </div>
+
+<div class="card full-width">
+  <h3>Scheduled PPM – Month Wise (All Groups & Locations)</h3>
+
+  <!-- ✅ Buttons go directly under heading -->
+  <div style="margin:10px 0;">
+    <select id="scheduledGroupFilter">
+      <option value="">Select Group</option>
+      <option>Geely</option>
+      <option>BMW</option>
+      <option>Pitstop</option>
+      <option>Budget</option>
+    </select>
+
+    <select id="scheduledLocationFilter">
+      <option value="">Select Location</option>
+    </select>
+
+    <button id="scheduledResetBtn">Show All</button>
+  </div>
+
+  <canvas id="scheduledMonthChart"></canvas>
+</div>
+
+
+
 
 <!-- Drill-down Modal -->
 <div id="drillModal">
@@ -191,7 +278,17 @@ canvas{max-height:320px}
         </div>
     </div>
 </div>
+
+
 <script>
+let activeGroup = "ALL";
+let isTableCollapsed = false;
+
+function setActiveGroupButton(group) {
+  document.querySelectorAll(".group-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.group === group);
+  });
+}
 
 const STORAGE_KEY="ppm:v70";
 const MONTHS=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
@@ -346,19 +443,51 @@ function countScheduled(r, allMonths){
 
 // --- KPIs ---
 function renderKPIs(){
-  let total=0,overdue=0;
+  let total = 0;
+  let missed = 0;
+  let completed = 0;
+  let scheduled = 0;
+
   data.forEach(r=>{
     if(getStatus(r)!=="Out"){
-      const cycles = Math.ceil((new Date(r.end)-new Date(r.start))/(r.intervalDays*24*60*60*1000));
+      const cycles = Math.ceil(
+        (new Date(r.end)-new Date(r.start)) /
+        (r.intervalDays*24*60*60*1000)
+      );
       total += cycles;
-      overdue += getMissed(r).length;
+      missed += getMissed(r).length;
+      completed += Object.values(r.months || {}).filter(v => v).length;
+      scheduled += getScheduled(r).length;
     }
   });
-  kpiDashboard.innerHTML=`
-    <div class="card ${overdue>OVERDUE_ALERT_LIMIT?'alert':''}">Total PPM<span>${total}</span></div>
-    <div class="card">Overdue<span>${overdue}</span></div>
-    <div class="card">Compliance %<span>${total?Math.round(((total-overdue)/total)*100):0}%</span></div>`;
+
+  const compliance = total
+    ? Math.round(((total - missed) / total) * 100)
+    : 0;
+
+  kpiDashboard.innerHTML = `
+    <div class="card">
+      Total PPM<span>${total}</span>
+    </div>
+
+    <div class="card">
+      Missed<span>${missed}</span>
+    </div>
+
+    <div class="card">
+      Completed<span>${completed}</span>
+    </div>
+
+    <div class="card">
+      Scheduled<span>${scheduled}</span>
+    </div>
+
+    <div class="card">
+      Compliance %<span>${compliance}%</span>
+    </div>
+  `;
 }
+
 
 // --- Group Dashboard ---
 function renderGroupDashboard(){
@@ -367,41 +496,65 @@ function renderGroupDashboard(){
   GROUPS.forEach(group => {
     const rows = data.filter(r => r.group === group && getStatus(r) !== "Out");
 
-    let totalPPM = 0;
+    let total = 0;
     let completed = 0;
-    let scheduledQty = 0;
-    let missedQty = 0;
+    let scheduled = 0;
+    let missed = 0;
 
     rows.forEach(r => {
-
-      // TOTAL cycles
       const cycles = Math.ceil(
         (new Date(r.end) - new Date(r.start)) /
         (r.intervalDays * 24 * 60 * 60 * 1000)
       );
-      totalPPM += cycles;
-
-      // ✅ COMPLETED (checked boxes)
+      total += cycles;
       completed += Object.values(r.months || {}).filter(v => v).length;
-
-      // ✅ SCHEDULED (blue cells)
-      scheduledQty += getScheduled(r).length;
-
-      // ✅ MISSED (RED cells – SAME AS TABLE)
-      missedQty += getMissed(r).length;
+      scheduled += getScheduled(r).length;
+      missed += getMissed(r).length;
     });
 
-    groupDashboard.insertAdjacentHTML("beforeend", `
-      <div class="card ${missedQty > OVERDUE_ALERT_LIMIT ? 'alert' : ''}">
-        <strong>${group}</strong><br>
-        <small>Total PPM: ${totalPPM}</small><br>
-        <small style="color:#27ae60">Completed: ${completed}</small><br>
-        <small style="color:#3498db">Scheduled: ${scheduledQty}</small><br>
-        <small style="color:#e74c3c">Missed: ${missedQty}</small>
-      </div>
-    `);
+    // Create container
+    const wrapper = document.createElement("div");
+    wrapper.className = "card";
+    wrapper.innerHTML = `
+      <h3 style="text-align:center;margin-bottom:10px">${group}</h3>
+      <canvas id="groupChart_${group}"></canvas>
+    `;
+    groupDashboard.appendChild(wrapper);
+
+    // Draw circular graph
+    new Chart(document.getElementById(`groupChart_${group}`), {
+      type: "doughnut",
+      data: {
+        labels: [
+          `Completed (${completed})`,
+          `Scheduled (${scheduled})`,
+          `Missed (${missed})`,
+          `Total (${total})`
+        ],
+        datasets: [{
+          data: [completed, scheduled, missed, total],
+          backgroundColor: [
+            "#27ae60", // completed
+            "#3498db", // scheduled
+            "#e74c3c", // missed
+            "#95a5a6"  // total
+          ]
+        }]
+      },
+      options: {
+      
+        cutout: "0%",
+        plugins: {
+          legend: {
+            position: "bottom"
+          }
+        }
+      }
+    });
   });
 }
+
+
 
 // --- Render Table ---
 function renderTable(rows=data){
@@ -434,7 +587,7 @@ function renderTable(rows=data){
     }).join("");
 
     tbody.insertAdjacentHTML("beforeend",`
-      <tr>
+      <tr class="ppm-row" style="display:${isTableCollapsed ? "none" : ""}">
         <td>${r.group}</td><td>${r.service}</td><td>${r.location}</td><td>${r.vendor}</td>
         <td>${r.start}</td><td>${r.end}</td><td>${getNextDue(r).toISOString().slice(0,10)}</td>
         <td>${missed.length}</td>
@@ -443,7 +596,7 @@ function renderTable(rows=data){
       </tr>`);
   });
 
-  renderKPIs(); renderGroupDashboard(); renderCharts(allMonths);
+  renderKPIs(); renderGroupDashboard(); renderCharts(allMonths, rows);
 }
 
 // --- Drill-down Modal ---
@@ -475,8 +628,9 @@ function openModal(title, filteredData){
                 <input type="checkbox" data-i="${i}" data-m="${key}" ${checked}></td>`;
         }).join("");
 
-        tbody.insertAdjacentHTML("beforeend", `
-            <tr>
+        tbody.insertAdjacentHTML("beforeend",`
+  <tr class="ppm-row">
+
                 <td>${r.group}</td><td>${r.service}</td><td>${r.location}</td><td>${r.vendor}</td>
                 <td>${r.start}</td><td>${r.end}</td><td>${getNextDue(r).toISOString().slice(0,10)}</td>
                 <td>${missed.length}</td>
@@ -553,33 +707,41 @@ searchBtn.onclick = () => {
 
 resetBtn.onclick=()=>{searchLocation.value=searchService.value=searchVendor.value=""; searchStatus.value="all"; renderTable();};
 
-document.querySelectorAll(".group-btn").forEach(b=>b.onclick=()=>renderTable(data.filter(r=>r.group===b.dataset.group)));
-groupReset.onclick=()=>renderTable();
 
 
 
 // --- Charts ---
-function renderCharts(allMonths) {
+function renderCharts(allMonths, filteredData = data) {
+
+const groupStatusCtx = document.getElementById("groupStatusChart");
+  const monthlyTrendCtx = document.getElementById("monthlyTrendChart");
+  const vendorCtx = document.getElementById("vendorChart");
+  const complianceCtx = document.getElementById("complianceGauge");
+
+  if (!groupStatusCtx || !monthlyTrendCtx || !vendorCtx || !complianceCtx) {
+    console.warn("Chart canvas missing");
+    return;
+  }
     // Destroy old charts
     Object.values(charts).forEach(c => c.destroy?.());
 
     // --- Group Status Chart ---
     const groupCompleted = GROUPS.map(g =>
-        data.filter(r => r.group === g)
+        filteredData.filter(r => r.group === g)
             .reduce((a, r) => a + Object.values(r.months || {}).filter(v => v).length, 0)
     );
 
     const groupMissed = GROUPS.map(g =>
-        data.filter(r => r.group === g)
+        filteredData.filter(r => r.group === g)
             .reduce((a, r) => a + getMissed(r).length, 0)
     );
 
     const groupScheduled = GROUPS.map(g =>
-        data.filter(r => r.group === g)
+        filteredData.filter(r => r.group === g)
             .reduce((a, r) => a + getScheduled(r).length, 0)
     );
 
-    charts.groupStatusChart = new Chart(groupStatusChart, {
+    charts.groupStatusChart = new Chart(groupStatusCtx, {
         type: 'bar',
         data: { labels: GROUPS, datasets: [
             { label: "Completed", data: groupCompleted, backgroundColor: "#27ae60" },
@@ -596,37 +758,45 @@ function renderCharts(allMonths) {
         }
     });
 
-    // --- Monthly Trend Chart ---
-    const monthlyMissed = allMonths.map(m =>
-        data.reduce((sum, r) =>
-            sum + getMissed(r).filter(x => x.key === `${m.year}-${m.month}`).length
-        , 0)
-    );
+    
+    // --- Service-wise Status Chart ---
+const serviceMap = {};
+filteredData.forEach(r => {
+    if (!serviceMap[r.service]) serviceMap[r.service] = { completed: 0, scheduled: 0, missed: 0 };
+    serviceMap[r.service].completed += Object.values(r.months || {}).filter(v => v).length;
+    serviceMap[r.service].scheduled += getScheduled(r).length;
+    serviceMap[r.service].missed += getMissed(r).length;
+});
 
-    charts.monthlyTrendChart = new Chart(monthlyTrendChart, {
-        type: 'line',
-        data: {
-            labels: allMonths.map(m => `${MONTHS[m.month].toUpperCase()} ${m.year}`),
-            datasets: [{ label: "Missed PPM", data: monthlyMissed, borderColor: "#e67e22", fill: false }]
-        },
-        options: {
-            plugins: { legend: { display: true } },
-            onClick: (evt, items) => {
-                if(items.length > 0){
-                    const idx = items[0].index;
-                    const monthObj = allMonths[idx];
-                    openModal(
-                        `Missed in ${MONTHS[monthObj.month].toUpperCase()} ${monthObj.year}`,
-                        data.filter(r => getMissed(r).some(x => x.key === `${monthObj.year}-${monthObj.month}`))
-                    );
-                }
+const serviceLabels = Object.keys(serviceMap);
+
+charts.monthlyTrendChart = new Chart(monthlyTrendChart, {
+    type: 'bar',
+    data: {
+        labels: serviceLabels,
+        datasets: [
+            { label: "Completed", data: serviceLabels.map(s => serviceMap[s].completed), backgroundColor: "#27ae60" },
+            { label: "Scheduled", data: serviceLabels.map(s => serviceMap[s].scheduled), backgroundColor: "#3498db" },
+            { label: "Missed", data: serviceLabels.map(s => serviceMap[s].missed), backgroundColor: "#e74c3c" }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+        onClick: (evt, items) => {
+            if(items.length > 0){
+                const service = serviceLabels[items[0].index];
+                openModal(`Service: ${service}`, data.filter(r => r.service === service));
             }
         }
-    });
+    },
+    plugins: [stackedBarLabels]
+});
 
     // --- Vendor Chart ---
     const vendorMap = {};
-    data.forEach(r => {
+    filteredData.forEach(r => {
         if (!vendorMap[r.vendor]) vendorMap[r.vendor] = { completed: 0, scheduled: 0, missed: 0 };
         vendorMap[r.vendor].completed += Object.values(r.months || {}).filter(v => v).length;
         vendorMap[r.vendor].scheduled += getScheduled(r).length;
@@ -660,29 +830,75 @@ function renderCharts(allMonths) {
     });
 
     // --- Compliance Gauge ---
-    const completedCycles = data.reduce((a, r) => a + Object.values(r.months || {}).filter(v => v).length, 0);
-    const totalCycles = data.reduce((a, r) =>
-        a + Math.ceil((new Date(r.end) - new Date(r.start)) / (r.intervalDays * 24 * 60 * 60 * 1000)), 0
-    );
+   let totalCompleted = 0, totalMissed = 0, totalScheduled = 0;
 
-    charts.complianceGauge = new Chart(complianceGauge, {
-        type: 'doughnut',
-        data: {
-            labels: ["Completed", "Remaining"],
-            datasets: [{ data: [completedCycles, totalCycles - completedCycles], backgroundColor: ["#27ae60", "#e74c3c"] }]
-        },
-        options: {
-            rotation: -90,
-            circumference: 180,
-            plugins: { legend: { display: true, position: 'bottom' } },
-            onClick: () => openModal(`Overdue/Missed PPM`, data.filter(r => getMissed(r).length > 0))
+filteredData.forEach(r => {
+    totalCompleted += Object.values(r.months || {}).filter(v => v).length;
+    totalMissed += getMissed(r).length;
+    totalScheduled += getScheduled(r).length;
+});
+
+
+    // --- Completion Wise PPM Overview Chart ---
+charts.complianceGauge = new Chart(complianceGauge, {
+    type: 'doughnut',
+    data: {
+        labels: ["Completed", "Scheduled", "Missed"],
+        datasets: [{
+            data: [
+                filteredData.reduce((sum, r) => sum + Object.values(r.months || {}).filter(v => v).length, 0),
+                filteredData.reduce((sum, r) => sum + countScheduled(r, allMonths), 0),
+                filteredData.reduce((sum, r) => sum + countMissed(r, allMonths), 0)
+            ],
+            backgroundColor: ["#27ae60", "#3498db", "#e74c3c"]
+        }]
+    },
+    options: {
+        rotation: -90,
+        circumference: 180,
+        plugins: { legend: { display: true, position: 'bottom' } },
+        onClick: (evt, items) => {
+            if(items.length === 0) return;
+
+            const label = items[0].chart.data.labels[items[0].index];
+            let filteredRows = [];
+
+            if(label === "Completed") {
+                filteredRows = filteredData.filter(r => Object.values(r.months||{}).filter(v => v).length > 0);
+            } else if(label === "Scheduled") {
+                filteredRows = filteredData.filter(r => countScheduled(r, allMonths) > 0);
+            } else if(label === "Missed") {
+                filteredRows = filteredData.filter(r => countMissed(r, allMonths) > 0);
+            }
+
+            if(filteredRows.length > 0) {
+                openModal(`${label} PPM`, filteredRows);
+            }
         }
-    });
-}
+    }
+});
 
+
+}
+const collapseBtn = document.getElementById("collapseBtn");
+
+if (collapseBtn) {
+  collapseBtn.addEventListener("click", () => {
+    isTableCollapsed = !isTableCollapsed;
+
+    document.querySelectorAll(".ppm-row").forEach(row => {
+      row.style.display = isTableCollapsed ? "none" : "";
+    });
+
+    collapseBtn.textContent = isTableCollapsed
+      ? "Expand Rows"
+      : "Collapse Rows";
+  });
+}
 
 // --- Initial render ---
 renderTable();
+
 const allMonths = globalMonths;
 
 const openGraphsBtn = document.getElementById("openGraphsBtn");
@@ -763,6 +979,161 @@ closeGraphsBtn.onclick = () => {
 // Optional: make charts responsive on window resize
 window.addEventListener('resize', () => {
     Object.values(chartsModal).forEach(c => c.resize?.());
+});
+
+
+// ===== GROUP BUTTON HIGHLIGHT LOGIC =====
+const groupButtons = document.querySelectorAll(".group-btn");
+const showAllBtn = document.getElementById("showAllBtn");
+
+// Group buttons click
+groupButtons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    activeGroup = btn.dataset.group;
+
+    // Remove highlight from all buttons
+    groupButtons.forEach(b => b.classList.remove("active"));
+
+    // Highlight clicked button
+    btn.classList.add("active");
+
+    // Filter table and charts by selected group
+    const filtered = data.filter(r => r.group === activeGroup);
+    renderTable(filtered);
+    renderCharts(globalMonths, filtered);
+  });
+});
+
+// Show All button click
+if (showAllBtn) {
+  showAllBtn.addEventListener("click", () => {
+    activeGroup = "ALL";
+
+    // Remove all highlights
+    groupButtons.forEach(b => b.classList.remove("active"));
+
+    // Show all data
+    renderTable(data);
+    renderCharts(globalMonths, data);
+  });
+}
+
+let scheduledChart; // store chart instance globally
+let scheduledGroupFilter = "";
+let scheduledLocationFilter = "";
+
+let scheduledMonthChartInstance = null;
+
+function renderScheduledMonthChart(filteredData = data, groupFilter = "", locationFilter = "") {
+    const monthsRange = updateGlobalMonths(); // get full months range from data
+    const monthLabels = monthsRange.map(m => `${MONTHS[m.month].toUpperCase()} ${m.year}`);
+    const monthCounts = Array(monthLabels.length).fill(0);
+
+    filteredData.forEach(r => {
+        if (getStatus(r) === "Out") return;
+
+        // Apply group filter
+        if (groupFilter && r.group !== groupFilter) return;
+        // Apply location filter
+        if (locationFilter && r.location !== locationFilter) return;
+
+        const scheduled = getScheduled(r);
+        scheduled.forEach(s => {
+            // Find index in monthsRange
+            const idx = monthsRange.findIndex(m => m.year === s.date.getFullYear() && m.month === s.date.getMonth());
+            if (idx !== -1) monthCounts[idx]++;
+        });
+    });
+
+    const ctx = document.getElementById("scheduledMonthChart");
+
+    // Destroy old chart if exists
+    if (scheduledMonthChartInstance) scheduledMonthChartInstance.destroy();
+
+    scheduledMonthChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: monthLabels,
+            datasets: [{
+                label: "Scheduled PPM",
+                data: monthCounts,
+                backgroundColor: "#3498db"
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: "Scheduled PPM Count" } },
+                x: { title: { display: true, text: "Months" } }
+            },
+            onClick: (evt, items) => {
+                if(items.length > 0){
+                    const idx = items[0].index;
+                    const monthObj = monthsRange[idx]; // get month/year object
+
+                    // Filter data for this month, including active group/location filters
+                    const tableData = filteredData.filter(r => {
+                        if(groupFilter && r.group !== groupFilter) return false;
+                        if(locationFilter && r.location !== locationFilter) return false;
+
+                        return getScheduled(r).some(s => s.date.getFullYear() === monthObj.year && s.date.getMonth() === monthObj.month);
+                    });
+
+                    // Open the modal table for this month
+                    openModal(
+                        `Scheduled PPM – ${MONTHS[monthObj.month].toUpperCase()} ${monthObj.year}` + 
+                        (groupFilter ? ` | Group: ${groupFilter}` : "") + 
+                        (locationFilter ? ` | Location: ${locationFilter}` : ""),
+                        tableData
+                    );
+                }
+            }
+        }
+    });
+}
+renderScheduledMonthChart();
+
+// --- Scheduled PPM Chart Filters ---
+const scheduledGroupSelect = document.getElementById("scheduledGroupFilter");
+const scheduledLocationSelect = document.getElementById("scheduledLocationFilter");
+const scheduledResetBtn = document.getElementById("scheduledResetBtn");
+
+// Populate locations dynamically based on selected group
+scheduledGroupSelect.addEventListener("change", () => {
+    const group = scheduledGroupSelect.value;
+    scheduledGroupFilter = group;
+
+    // Filter locations for this group
+    const locations = [...new Set(data.filter(r => !group || r.group === group).map(r => r.location))];
+
+    scheduledLocationSelect.innerHTML = '<option value="">Select Location</option>';
+    locations.forEach(loc => {
+        const option = document.createElement("option");
+        option.value = loc;
+        option.textContent = loc;
+        scheduledLocationSelect.appendChild(option);
+    });
+
+    scheduledLocationFilter = "";
+    scheduledLocationSelect.value = "";
+    renderScheduledMonthChart(data, scheduledGroupFilter, scheduledLocationFilter);
+});
+
+// Apply location filter
+scheduledLocationSelect.addEventListener("change", () => {
+    scheduledLocationFilter = scheduledLocationSelect.value;
+    renderScheduledMonthChart(data, scheduledGroupFilter, scheduledLocationFilter);
+});
+
+// Reset button
+scheduledResetBtn.addEventListener("click", () => {
+    scheduledGroupFilter = "";
+    scheduledLocationFilter = "";
+    scheduledGroupSelect.value = "";
+    scheduledLocationSelect.innerHTML = '<option value="">Select Location</option>';
+    renderScheduledMonthChart();
 });
 
 </script>
