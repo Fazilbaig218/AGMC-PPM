@@ -92,11 +92,45 @@ canvas{max-height:320px}
 }
 
 
+/* ===== Dashboard Header (Title + Logo) ===== */
+.dashboard-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dashboard-header h2{
+  margin: 0;
+}
+
+.header-logo{
+  height: 25px;   /* adjust if needed */
+  width: auto;
+}
+
+
 </style>
 </head>
 <body>
 
-<h2>Overall PPM Overview</h2>
+<div class="dashboard-header">
+  <h2>Overall PPM Overview</h2>
+  
+  <!-- Right-side container for logout + logo -->
+  <div style="display:flex; align-items:center; gap:10px;">
+    <button id="logoutBtn" style="
+        padding:6px 12px;
+        background:#e74c3c;
+        color:white;
+        border:none;
+        border-radius:6px;
+        cursor:pointer;
+    ">Logout</button>
+    <img src="Logo.GIF" alt="Company Logo" class="header-logo">
+  </div>
+</div>
+
 <div class="dashboard" id="kpiDashboard"></div>
 
 <h2>Group PPM Overview</h2>
@@ -165,17 +199,7 @@ canvas{max-height:320px}
 </table>
 
 <h2>Analytics</h2>
-<button id="openGraphsBtn" style="
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    padding: 8px 12px;
-    background: #3498db;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-">Full Graph View</button>
+
 
 <div class="chart-grid">
   <div class="card">
@@ -242,42 +266,7 @@ canvas{max-height:320px}
   </div>
 </div>
 
-<!-- Full-page Graphs Modal -->
-<!-- Full-page Graphs Modal -->
-<div id="graphsModal" style="
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: #fff;
-    z-index: 2000;
-    overflow-y: auto;
-">
-    <div style="position: relative; max-width: 1200px; margin: 20px auto; padding: 20px;">
-        <button id="closeGraphsBtn" style="
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 8px 12px;
-            background: #e74c3c;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            z-index: 2100;
-        ">Close</button>
 
-        <h2>Analytics (Full View)</h2>
-        <div class="chart-grid" id="graphsModalContent">
-            <div class="card"><canvas id="modalGroupStatusChart"></canvas></div>
-            <div class="card"><canvas id="modalMonthlyTrendChart"></canvas></div>
-            <div class="card"><canvas id="modalVendorChart"></canvas></div>
-            <div class="card"><canvas id="modalComplianceGauge"></canvas></div>
-        </div>
-    </div>
-</div>
 
 
 <script>
@@ -901,85 +890,7 @@ renderTable();
 
 const allMonths = globalMonths;
 
-const openGraphsBtn = document.getElementById("openGraphsBtn");
-const closeGraphsBtn = document.getElementById("closeGraphsBtn");
-const graphsModal = document.getElementById("graphsModal");
-let chartsModal = {}; // will store modal charts
 
-function duplicateChart(originalChart, canvasId, onClickHandler){
-    return new Chart(document.getElementById(canvasId), {
-        type: originalChart.config.type,
-        data: JSON.parse(JSON.stringify(originalChart.data)),
-        options: {
-            ...JSON.parse(JSON.stringify(originalChart.options)),
-            onClick: onClickHandler
-        },
-        plugins: originalChart.config.plugins
-    });
-}
-
-openGraphsBtn.onclick = () => {
-    graphsModal.style.display = "block";
-
-    // Destroy old modal charts if exist
-    Object.values(chartsModal).forEach(c => c.destroy?.());
-
-    // Duplicate charts with proper click handlers
-    chartsModal.groupStatusChart = duplicateChart(
-        charts.groupStatusChart,
-        "modalGroupStatusChart",
-        (evt, items) => {
-            if(items.length > 0){
-                const group = charts.groupStatusChart.data.labels[items[0].index];
-                openModal(`Group: ${group}`, data.filter(r => r.group === group));
-            }
-        }
-    );
-
-    chartsModal.monthlyTrendChart = duplicateChart(
-        charts.monthlyTrendChart,
-        "modalMonthlyTrendChart",
-        (evt, items) => {
-            if(items.length > 0){
-                const idx = items[0].index;
-                const monthObj = globalMonths[idx]; // dynamic month/year
-                openModal(
-                    `Missed in ${MONTHS[monthObj.month].toUpperCase()} ${monthObj.year}`,
-                    data.filter(r => getMissed(r).some(x => x.key === `${monthObj.year}-${monthObj.month}`))
-                );
-            }
-        }
-    );
-
-    chartsModal.vendorChart = duplicateChart(
-        charts.vendorChart,
-        "modalVendorChart",
-        (evt, items) => {
-            if(items.length > 0){
-                const vendor = charts.vendorChart.data.labels[items[0].index];
-                openModal(`Vendor: ${vendor}`, data.filter(r => r.vendor === vendor));
-            }
-        }
-    );
-
-    chartsModal.complianceGauge = duplicateChart(
-        charts.complianceGauge,
-        "modalComplianceGauge",
-        () => openModal(`Overdue/Missed PPM`, data.filter(r => getMissed(r).length > 0))
-    );
-};
-
-
-// Close modal
-closeGraphsBtn.onclick = () => {
-    graphsModal.style.display = "none";
-    Object.values(chartsModal).forEach(c => c.destroy?.());
-};
-
-// Optional: make charts responsive on window resize
-window.addEventListener('resize', () => {
-    Object.values(chartsModal).forEach(c => c.resize?.());
-});
 
 
 // ===== GROUP BUTTON HIGHLIGHT LOGIC =====
@@ -1134,6 +1045,14 @@ scheduledResetBtn.addEventListener("click", () => {
     scheduledGroupSelect.value = "";
     scheduledLocationSelect.innerHTML = '<option value="">Select Location</option>';
     renderScheduledMonthChart();
+});
+
+document.getElementById("logoutBtn").addEventListener("click", function() {
+    // Optional: Clear any session info if used
+    // localStorage.removeItem("loggedInUser");
+
+    // Redirect to welcome page
+    window.location.href = "welcome.html"; // <-- replace with your actual welcome page filename
 });
 
 </script>
